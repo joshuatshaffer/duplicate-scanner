@@ -13,8 +13,11 @@ import Control.Concurrent
 type Checksum = String
 
 catPaths :: FilePath -> FilePath -> FilePath
-catPaths a b | last a == '/' || head b == '/' = a++b
-             | otherwise                      = a++"/"++b
+catPaths a b | doob && boob = a ++ tail b
+             | doob || boob = a ++ b
+             | otherwise    = a ++ "/" ++ b
+             where doob = last a == '/'
+                   boob = head b == '/'
 
 mapMpar :: (a -> IO b) -> [a] -> IO [b]
 mapMpar f xs = do
