@@ -1,16 +1,13 @@
 module Main where
 
+import Checksum
+
 import qualified Data.Map.Strict as M
 import System.Directory
-import System.Process
-import System.IO
-import Data.Char
 import Data.List (intercalate)
 import Control.Monad
 import Control.Concurrent.MVar
 import Control.Concurrent
-
-type Checksum = String
 
 catPaths :: FilePath -> FilePath -> FilePath
 catPaths a b | doob && boob = a ++ tail b
@@ -33,14 +30,6 @@ mapMpar f xs = do
          putMVar mv (y:ys)
          signalQSemN sem 1
     collectResult sem _  (Left _) = signalQSemN sem 1
-
-checkFile :: FilePath -> IO Checksum
-checkFile file = do
-  let p = (proc "md5sum" [file]){ std_out = CreatePipe }
-  (_, Just hout, _, _) <- createProcess p
-  s <- hGetContents hout
-  putStrLn . head $ lines s
-  return $! takeWhile isHexDigit s
 
 checkFiles :: [FilePath] -> IO [(Checksum,FilePath)]
 checkFiles = mapMpar (\f -> checkFile f >>= \c -> return (c, f))
@@ -75,4 +64,4 @@ prettyPrintMap = unlines . map foo . M.assocs
 main :: IO ()
 main = do
   m <- checkDir "/mnt/data-i/joshua/Shaffers Photos"
-  putStrLn . prettyPrintMap $ M.filter ((>1) . length) m
+  putStrLn . prettyPrintMap $  m -- M.filter ((>1) . length)
