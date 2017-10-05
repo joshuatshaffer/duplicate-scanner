@@ -2,7 +2,7 @@
 module Checksum where
 
 import Crypto.Hash
-import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as B
 
 type Checksum = Digest MD5
 
@@ -15,4 +15,4 @@ checkFile !file = do
     -- Yes, I know, MD5... but it's not
     -- like it's for security or anything.
     hash' :: B.ByteString -> Digest MD5
-    hash' = hash
+    hash' = hashlazy
