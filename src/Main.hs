@@ -1,6 +1,7 @@
 module Main where
 
 import Checksum
+import Parallel
 
 import qualified Data.Map.Strict as M
 import System.Directory
@@ -16,44 +17,22 @@ catPaths a b | doob && boob = a ++ tail b
              where doob = last a == '/'
                    boob = head b == '/'
 
-mapMpar :: (a -> IO b) -> [a] -> IO [b]
-mapMpar f xs = do
-  mv <- newMVar []
-  sem <- newQSemN 0
-  mapM_ (\x -> forkFinally (f x) (collectResult sem mv)) xs
-  waitQSemN sem (length xs)
-  takeMVar mv
-  where
-    collectResult :: QSemN -> MVar [a] -> Either b a -> IO ()
-    collectResult sem mv (Right y) =
-      do ys <- takeMVar mv
-         putMVar mv (y:ys)
-         signalQSemN sem 1
-    collectResult sem _  (Left _) = signalQSemN sem 1
+newtype CheckRez = CheckRez (M.Map Checksum [FilePath])
 
-checkFiles :: [FilePath] -> IO [(Checksum,FilePath)]
-checkFiles = mapMpar (\f -> checkFile f >>= \c -> return (c, f))
+instance Monoid CheckRez where
+    mempty = CheckRez M.empty
+    mappend (CheckRez x) (CheckRez y) = CheckRez $ M.unionWith (++) x y
 
-partFilesAndDirs :: FilePath -> [FilePath] -> IO ([FilePath], [FilePath])
-partFilesAndDirs wd = preFilter >=> part
-  where
-    preFilter :: [FilePath] -> IO [FilePath]
-    preFilter = filterM doesPathExist . map (catPaths wd) >=>
-                filterM (fmap not . pathIsSymbolicLink)
-    part :: [FilePath] -> IO ([FilePath], [FilePath])
-    part zs = do
-      dirs <- filterM doesDirectoryExist zs
-      files <- filterM doesFileExist zs
-      return (dirs,files)
-
-checkDir :: FilePath -> IO (M.Map Checksum [FilePath])
-checkDir dir = do
-  putStrLn $ "Checking dir " ++ dir
-  (dirs,files) <- listDirectory dir >>= partFilesAndDirs dir
-  bar <- checkFiles files
-  let m = M.fromListWith (++) $ map (\(c,p) -> (c,[p])) bar
-  ms <- mapMpar checkDir dirs
-  return $! M.unionsWith (++) (m:ms)
+check :: FilePath -> IO CheckRez
+check path = do
+    ex <- doesPathExist path
+    sim <- pathIsSymbolicLink path
+    file <- doesFileExist path
+    if ex && not sim
+        then if file
+            then fmap (\c -> CheckRez $ M.singleton c [path]) $ checkFile path
+            else listDirectory path >>= (mapMPar check . map (catPaths path))
+        else mempty
 
 prettyPrintMap :: (Show k, Show a) => M.Map k [a] -> String
 prettyPrintMap = unlines . map foo . M.assocs
@@ -63,5 +42,6 @@ prettyPrintMap = unlines . map foo . M.assocs
 
 main :: IO ()
 main = do
-  m <- checkDir "/mnt/data-i/joshua/Shaffers Photos"
-  putStrLn . prettyPrintMap $  m -- M.filter ((>1) . length)
+  (CheckRez m) <- check "/mnt/data-i/joshua/Shaffers Photos"
+  print $ M.foldr (\a len -> len + (length a)) 0 m
+  putStrLn . prettyPrintMap $ M.filter ((>1) . length) m -- M.filter ((>1) . length)
